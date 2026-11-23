@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mnemotheca</title>
+<meta name="description" content="Le cose belle che mi passano sotto gli occhi, e che non voglio dimenticare. Un atlante di architettura, arte, cinema, fotografia e design.">
+<meta property="og:title" content="Mnemotheca">
+<meta property="og:description" content="Le cose belle che mi passano sotto gli occhi, e che non voglio dimenticare.">
+<meta name="theme-color" content="#171615">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23171615'/%3E%3Crect x='8' y='7' width='9' height='12' fill='%23E8E2D4'/%3E%3Crect x='15' y='15' width='10' height='10' fill='%23A29C90'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="ch-r" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter>
+  <filter id="ch-g" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter>
+  <filter id="ch-b" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"/></filter>
+</svg>
+
+<div id="loader" aria-live="polite">
+  <p class="loader-name">Mnemotheca</p>
+  <p class="loader-count"><span id="load-n">0</span> / <span id="load-t">0</span></p>
+</div>
+
+<main id="field" tabindex="0" aria-label="Atlante: trascina per esplorare">
+  <div id="world"></div>
+</main>
+
+<header class="bar bar-top">
+  <a class="brand" href="#" data-view="atlas">Mnemotheca</a>
+  <nav class="nav" aria-label="Viste">
+    <button data-view="atlas" aria-pressed="true">Atlante</button>
+    <button data-view="index" aria-pressed="false">Indice</button>
+    <button data-view="info" aria-pressed="false">Info</button>
+  </nav>
+</header>
+
+<footer class="bar bar-bottom">
+  <div class="filters" id="filters" role="group" aria-label="Filtra per disciplina"></div>
+  <button id="sound" class="sound" aria-pressed="false" aria-label="Suono">
+    <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <span class="sound-label">suono</span>
+  </button>
+</footer>
+
+<p class="hint" id="hint">trascina in ogni direzione</p>
+
+<section id="index" class="sheet" hidden aria-label="Indice delle tavole">
+  <ol id="index-list"></ol>
+  <div id="index-peek" aria-hidden="true"></div>
+</section>
+
+<section id="info" class="sheet sheet-info" hidden aria-label="Informazioni">
+  <div class="info-body">
+    <h1>Mnemotheca</h1>
+    <p class="lede">Le cose belle che mi passano sotto gli occhi, e che non voglio dimenticare.</p>
+    <p><em>Mnemo-</em>, memoria; <em>-theca</em>, il luogo dove si custodisce, come in biblioteca e pinacoteca. Il nome viene dall’atlante <em>Mnemosyne</em> che Aby Warburg compose tra il 1924 e il 1929: pannelli di stoffa nera su cui fotografie di epoche lontanissime stavano accanto, e dagli accostamenti nascevano significati che nessuna immagine aveva da sola.</p>
+    <p>Qui raccolgo architettura, pittura, cinema, fotografia, design, testi, scienza. Ogni tavola resta sola, con il suo numero. Gli accostamenti li fa chi guarda.</p>
+    <p class="info-links"><a href="https://www.instagram.com/mnemotheca/" target="_blank" rel="noopener">Instagram @mnemotheca</a></p>
+    <p class="info-small">Le immagini appartengono ai rispettivi autori e sono riprodotte a scopo di studio e divulgazione.</p>
+  </div>
+</section>
+
+<div id="detail" class="detail" hidden role="dialog" aria-modal="true" aria-labelledby="d-title">
+  <div class="d-stage">
+    <div class="d-track" id="d-track"></div>
+    <button class="d-arrow d-prev" id="d-prev" aria-label="Immagine precedente">‹</button>
+    <button class="d-arrow d-next" id="d-next" aria-label="Immagine successiva">›</button>
+    <p class="d-count" id="d-count"></p>
+  </div>
+  <aside class="d-card">
+    <button class="d-close" id="d-close" aria-label="Chiudi">chiudi</button>
+    <p class="d-num" id="d-num"></p>
+    <h2 id="d-title"></h2>
+    <p class="d-author" id="d-author"></p>
+    <p class="d-meta" id="d-meta"></p>
+    <div class="d-text" id="d-text"></div>
+    <div class="d-walk">
+      <button id="d-before">tavola precedente</button>
+      <button id="d-after">tavola successiva</button>
+    </div>
+  </aside>
+</div>
+
+<script src="main.js" type="module"></script>
+</body>
+</html>
