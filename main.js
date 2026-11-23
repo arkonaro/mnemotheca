@@ -1,8 +1,9 @@
 import { Sound } from './sound.js';
+import { FieldGL } from './gl.js';
 
 const DISC = {
-  Architettura: 'architettura', Arte: 'arte', Cinema: 'cinema', Fotografia: 'fotografia',
-  Design: 'design', Testo: 'testi', Scienza: 'scienza', Filosofia: 'filosofia',
+  Architettura: 'architecture', Arte: 'art', Cinema: 'cinema', Fotografia: 'photography',
+  Design: 'design', Testo: 'text', Scienza: 'science', Filosofia: 'philosophy',
 };
 const $ = (s) => document.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -20,9 +21,30 @@ const ratio = (w) => { const s = sizes[w.img[0]]; return s ? s[0] / s[1] : 0.8; 
 let seed = 1994;
 const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
 
+/* ================= sound: on by default ================= */
 const sound = new Sound();
+const soundBtn = $('#sound');
+let soundWanted = true;
+try { soundWanted = localStorage.getItem('mnemo-sound') !== 'off'; } catch {}
+const showSound = () => soundBtn.setAttribute('aria-pressed', String(soundWanted));
+showSound();
+// Browsers only let a page make sound after the visitor's first gesture,
+// so the sound starts on the first click, drag, scroll or key.
+const GESTURES = ['pointerdown', 'pointerup', 'keydown', 'touchend'];
+const firstGesture = (e) => {
+  if (e.target?.closest?.('#sound')) return; // the button handles itself
+  if (soundWanted) { if (!sound.on) sound.toggle(); else sound.ctx?.resume(); }
+  if (!soundWanted || sound.ctx?.state === 'running') GESTURES.forEach((t) => removeEventListener(t, firstGesture, true));
+};
+GESTURES.forEach((t) => addEventListener(t, firstGesture, { capture: true, passive: true }));
+soundBtn.addEventListener('click', () => {
+  soundWanted = !soundWanted;
+  if (soundWanted !== sound.on) sound.toggle();
+  try { localStorage.setItem('mnemo-sound', soundWanted ? 'on' : 'off'); } catch {}
+  showSound();
+});
 
-/* ================= field ================= */
+/* ================= field layout ================= */
 const field = $('#field');
 const world = $('#world');
 const small = innerWidth < 700;
@@ -36,6 +58,10 @@ const H = rows * CELL;
 // shuffle the cells: neighbours on the cloth are not neighbours in time
 const cells = [...Array(cols * rows).keys()];
 for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+
+let gl = null;
+try { gl = new FieldGL($('#glcanvas'), { reduced }); document.body.classList.add('gl'); }
+catch (e) { console.warn('WebGL off:', e); }
 
 const items = works.map((w, i) => {
   const c = cells[i];
@@ -55,8 +81,9 @@ const items = works.map((w, i) => {
   el.setAttribute('aria-label', `${w.n}. ${w.titolo}, ${w.autore}`);
   const frame = document.createElement('div');
   frame.className = 'frame';
+  let img = null;
   if (has(w.img[0])) {
-    const img = new Image();
+    img = new Image();
     img.className = 'base';
     img.alt = '';
     img.decoding = 'async';
@@ -64,39 +91,44 @@ const items = works.map((w, i) => {
     frame.append(img);
   } else {
     frame.classList.add('slip');
-    frame.innerHTML = `<span></span>`;
+    frame.innerHTML = '<span></span>';
     frame.firstChild.textContent = w.titolo;
   }
   const label = document.createElement('figcaption');
   label.className = 'label';
-  label.innerHTML = `<b>${w.n}</b><i></i>`;
+  label.innerHTML = '<b></b><i></i>';
+  label.querySelector('b').textContent = w.n;
   label.querySelector('i').textContent = w.titolo;
   el.append(frame, label);
   world.append(el);
-  return { w, el, frame, x, y, width, height, sx: 0, sy: 0 };
+  return { w, el, frame, img, x, y, width, height, sx: 1e9, sy: 1e9, tex: null, hover: 0, target: 0, mouse: [0.5, 0.5], vel: [0, 0], alpha: 0, muted: false };
 });
 
-/* loader: count thumbnails as they arrive */
+/* loader: count thumbnails as they arrive; each one becomes a texture */
 {
-  const imgs = items.map((it) => it.frame.querySelector('img')).filter(Boolean);
+  const withImg = items.filter((it) => it.img);
   let done = 0;
-  $('#load-t').textContent = imgs.length;
+  $('#load-t').textContent = withImg.length;
   const finish = () => setTimeout(() => $('#loader').classList.add('done'), 250);
-  const tick = (img) => { img.classList.add('in'); $('#load-n').textContent = ++done; if (done === imgs.length) finish(); };
-  imgs.forEach((img) => (img.complete && img.naturalWidth ? tick(img) : (img.onload = img.onerror = () => tick(img))));
-  if (!imgs.length) finish();
+  const tick = (it) => {
+    it.img.classList.add('in');
+    if (gl && it.img.naturalWidth) { try { it.tex = gl.texture(it.img); } catch {} }
+    $('#load-n').textContent = ++done;
+    if (done === withImg.length) finish();
+  };
+  withImg.forEach((it) => (it.img.complete && it.img.naturalWidth ? tick(it) : (it.img.onload = it.img.onerror = () => tick(it))));
+  if (!withImg.length) finish();
   setTimeout(finish, 9000); // never hold the visitor hostage
 }
 
-/* camera with inertia; positions wrap around so the cloth has no edges */
-const cam = { x: -(W - innerWidth) / 2, y: -(H - innerHeight) / 2, vx: 0, vy: 0 };
+/* ================= camera, drag, inertia ================= */
+const cam = { x: -(W - innerWidth) / 2, y: -(H - innerHeight) / 2, vx: 0, vy: 0, dx: 0, dy: 0 };
 const mod = (a, n) => ((a % n) + n) % n;
 function place() {
   const vw = innerWidth, vh = innerHeight;
   for (const it of items) {
-    let px = mod(it.x + cam.x + CELL, W) - CELL;
-    let py = mod(it.y + cam.y + CELL, H) - CELL;
-    // if the world is smaller than the viewport on an axis, items simply wrap inside it
+    const px = mod(it.x + cam.x + CELL, W) - CELL;
+    const py = mod(it.y + cam.y + CELL, H) - CELL;
     if (px !== it.sx || py !== it.sy) {
       it.sx = px; it.sy = py;
       it.el.style.transform = `translate3d(${px}px, ${py}px, 0)`;
@@ -106,19 +138,44 @@ function place() {
   }
 }
 
-let dragging = false, moved = 0, last = null, raf = 0;
-function loop() {
+let dragging = false, moved = 0, last = null;
+let hovered = null;
+const pointer = { x: -1, y: -1, px: -1, py: -1 };
+const t0 = performance.now();
+
+function frame(now) {
+  const bx = cam.x, by = cam.y;
   if (!dragging) {
     cam.x += cam.vx; cam.y += cam.vy;
     cam.vx *= 0.93; cam.vy *= 0.93;
-    if (Math.abs(cam.vx) < 0.02 && Math.abs(cam.vy) < 0.02) { cam.vx = cam.vy = 0; }
+    if (Math.abs(cam.vx) < 0.02 && Math.abs(cam.vy) < 0.02) cam.vx = cam.vy = 0;
   }
+  // smoothed camera speed, used by the glass and the sound
+  cam.dx += (cam.x - bx - cam.dx) * 0.2; cam.dy += (cam.y - by - cam.dy) * 0.2;
   place();
-  sound.motion(Math.hypot(cam.vx, cam.vy));
-  raf = cam.vx || cam.vy || dragging ? requestAnimationFrame(loop) : 0;
+  sound.motion(Math.hypot(cam.dx, cam.dy));
+
+  if (gl) {
+    const plates = [];
+    for (const it of items) {
+      it.hover += (it.target - it.hover) * (it.target ? 0.08 : 0.05);
+      it.alpha += ((it.muted ? 0.12 : 1) - it.alpha) * 0.08;
+      if (it === hovered && pointer.x >= 0) {
+        const u = (pointer.x - it.sx) / it.width, v = (pointer.y - it.sy) / it.height;
+        const du = pointer.px >= 0 ? (pointer.x - pointer.px) / it.width : 0;
+        const dv = pointer.px >= 0 ? (pointer.y - pointer.py) / it.height : 0;
+        it.mouse[0] += (u - it.mouse[0]) * 0.25; it.mouse[1] += (v - it.mouse[1]) * 0.25;
+        it.vel[0] += (du - it.vel[0]) * 0.15; it.vel[1] += (dv - it.vel[1]) * 0.15;
+      } else { it.vel[0] *= 0.9; it.vel[1] *= 0.9; }
+      if (it.vis && it.tex) plates.push({ x: it.sx, y: it.sy, w: it.width, h: it.height, tex: it.tex, hover: it.hover, mouse: it.mouse, vel: it.vel, alpha: it.alpha });
+    }
+    pointer.px = pointer.x; pointer.py = pointer.y;
+    gl.render(plates, (now - t0) / 1000, [cam.dx, cam.dy]);
+  }
+  requestAnimationFrame(frame);
 }
-const kick = () => { if (!raf) raf = requestAnimationFrame(loop); };
 place();
+requestAnimationFrame(frame);
 
 const hint = $('#hint');
 const hideHint = () => hint.classList.add('gone');
@@ -130,9 +187,9 @@ field.addEventListener('pointerdown', (e) => {
   last = { x: e.clientX, y: e.clientY, t: performance.now() };
   cam.vx = cam.vy = 0;
   field.setPointerCapture(e.pointerId);
-  kick();
 });
 field.addEventListener('pointermove', (e) => {
+  pointer.x = e.clientX; pointer.y = e.clientY;
   if (!dragging) return;
   const dx = e.clientX - last.x, dy = e.clientY - last.y;
   const now = performance.now(), dt = Math.max(1, now - last.t);
@@ -140,7 +197,7 @@ field.addEventListener('pointermove', (e) => {
   cam.vx = (dx / dt) * 16; cam.vy = (dy / dt) * 16;
   moved += Math.abs(dx) + Math.abs(dy);
   last = { x: e.clientX, y: e.clientY, t: now };
-  if (moved > 6) { field.classList.add('dragging'); hideHint(); }
+  if (moved > 6) { field.classList.add('dragging'); hideHint(); setHover(null); }
 });
 const release = (e) => {
   if (!dragging) return;
@@ -148,14 +205,13 @@ const release = (e) => {
   field.classList.remove('dragging');
   if (performance.now() - last.t > 80) cam.vx = cam.vy = 0;
   if (moved < 6) {
-    // a click, not a drag: find the work under the pointer
     const hit = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.classList?.contains('tav'));
     if (hit) open(items.findIndex((it) => it.el === hit));
   }
-  kick();
 };
 field.addEventListener('pointerup', release);
 field.addEventListener('pointercancel', release);
+field.addEventListener('pointerleave', () => { pointer.x = pointer.y = -1; });
 field.addEventListener('wheel', (e) => {
   e.preventDefault();
   const k = e.deltaMode === 1 ? 16 : 1;
@@ -163,54 +219,32 @@ field.addEventListener('wheel', (e) => {
   cam.y -= (e.shiftKey ? 0 : e.deltaY) * k;
   cam.vx = cam.vy = 0;
   hideHint();
-  place();
 }, { passive: false });
 addEventListener('keydown', (e) => {
   if (view !== 'atlas' || !$('#detail').hidden) return;
   const step = 14;
   const map = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
-  if (map[e.key] && document.activeElement === field) { cam.vx = map[e.key][0]; cam.vy = map[e.key][1]; kick(); e.preventDefault(); }
+  if (map[e.key] && document.activeElement === field) { cam.vx = map[e.key][0]; cam.vy = map[e.key][1]; e.preventDefault(); }
 });
 items.forEach((it, i) => it.el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(i); } }));
-addEventListener('resize', place);
+addEventListener('resize', () => { gl?.resize(); place(); });
 
-/* ---------- hover: the image splits into its red, green and blue plates ---------- */
-function splitOn(frame, idx) {
-  const base = frame.querySelector('img.base');
-  if (!base || frame.classList.contains('split') || reduced) return;
-  frame.classList.add('split');
-  const layers = ['g', 'b'].map((c) => {
-    const im = base.cloneNode(); im.className = 'ch'; im.style.filter = `url(#ch-${c})`; frame.append(im); return im;
-  });
-  const slice = base.cloneNode(); slice.className = 'slice'; frame.append(slice);
-  const t0 = performance.now();
-  let alive = true;
-  const step = (t) => {
-    if (!alive) return;
-    const age = (t - t0) / 1000;
-    const burst = Math.max(0, 1 - age / 0.45);            // strong glitch at first, then it settles
-    const drift = 1.5 + Math.sin(t / 380) * 1.2;          // a slow residual misregistration
-    const a = burst * 14 + drift;
-    layers[0].style.transform = `translate(${-a * 0.7}px, ${Math.sin(t / 90) * burst * 3}px)`;
-    layers[1].style.transform = `translate(${a}px, ${-a * 0.25}px)`;
-    if (burst > 0 && Math.random() < 0.5) {
-      const top = Math.random() * 90, h = 2 + Math.random() * 12;
-      slice.style.clipPath = `inset(${top}% 0 ${Math.max(0, 100 - top - h)}% 0)`;
-      slice.style.transform = `translateX(${(Math.random() - 0.5) * 40 * burst}px)`;
-      slice.style.opacity = 1;
-    } else slice.style.opacity = 0;
-    requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-  frame._off = () => { alive = false; layers.forEach((l) => l.remove()); slice.remove(); frame.classList.remove('split'); };
-  sound.pluck(idx);
+/* ---------- hover: the plate under the pointer turns liquid ---------- */
+function setHover(it) {
+  if (hovered === it) return;
+  if (hovered) hovered.target = 0;
+  hovered = it;
+  if (it) {
+    it.target = 1;
+    it.mouse = [(pointer.x - it.sx) / it.width, (pointer.y - it.sy) / it.height];
+    sound.pluck(items.indexOf(it));
+  }
 }
-function splitOff(frame) { frame._off?.(); frame._off = null; }
-items.forEach((it, i) => {
-  it.el.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && !dragging) splitOn(it.frame, i); });
-  it.el.addEventListener('pointerleave', () => splitOff(it.frame));
-  it.el.addEventListener('focus', () => splitOn(it.frame, i));
-  it.el.addEventListener('blur', () => splitOff(it.frame));
+items.forEach((it) => {
+  it.el.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && !dragging) setHover(it); });
+  it.el.addEventListener('pointerleave', () => { if (hovered === it) setHover(null); });
+  it.el.addEventListener('focus', () => { pointer.x = it.sx + it.width / 2; pointer.y = it.sy + it.height / 2; setHover(it); });
+  it.el.addEventListener('blur', () => { if (hovered === it) setHover(null); });
 });
 
 /* ================= filters ================= */
@@ -224,40 +258,44 @@ const indexLis = [];
     const b = document.createElement('button');
     b.dataset.key = key ?? '';
     b.setAttribute('aria-pressed', key === null ? 'true' : 'false');
-    b.innerHTML = `${text}${n ? `<sup>${n}</sup>` : ''}`;
+    b.innerHTML = `${text}<sup>${n}</sup>`;
     b.onclick = () => setFilter(key);
     box.append(b);
   };
-  mk(null, 'tutto', N);
+  mk(null, 'all', N);
   Object.keys(DISC).filter((k) => counts[k]).forEach((k) => mk(k, DISC[k], counts[k]));
 }
 function setFilter(key) {
   filter = key;
   document.querySelectorAll('#filters button').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.key || null) === key)));
-  items.forEach((it) => it.el.classList.toggle('muted', !!key && it.w.disciplina !== key));
+  items.forEach((it) => { it.muted = !!key && it.w.disciplina !== key; it.el.classList.toggle('muted', it.muted); });
   indexLis.forEach((li, i) => (li.hidden = !!key && works[i].disciplina !== key));
 }
 
 /* ================= views ================= */
 let view = 'atlas';
+const peek = $('#index-peek');
 function setView(v) {
   view = v;
   document.querySelectorAll('.nav button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
   $('#index').hidden = v !== 'index';
   $('#info').hidden = v !== 'info';
+  peek.classList.remove('on');
   if (v === 'atlas') field.focus({ preventScroll: true });
 }
 document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); setView(b.dataset.view); }));
+// a click on the empty cloth around the index or the about text goes back to the atlas
+$('#index').addEventListener('click', (e) => { if (!e.target.closest('.row')) setView('atlas'); });
+$('#info').addEventListener('click', (e) => { if (!e.target.closest('.info-body')) setView('atlas'); });
 
-/* index list, newest first */
+/* index list, newest first, with a preview that follows the pointer */
 {
   const list = $('#index-list');
-  const peek = $('#index-peek');
   works.forEach((w, i) => {
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.className = 'row';
-    b.innerHTML = `<span class="n"></span><span class="t"></span><span class="a"></span><span class="y"></span><span class="d"></span>`;
+    b.innerHTML = '<span class="n"></span><span class="t"></span><span class="a"></span><span class="y"></span><span class="d"></span>';
     b.querySelector('.n').textContent = w.n;
     b.querySelector('.t').textContent = w.titolo;
     b.querySelector('.a').textContent = w.autore;
@@ -266,20 +304,24 @@ document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('clic
     b.onclick = () => open(i);
     b.onmouseenter = () => {
       peek.innerHTML = '';
-      if (!has(w.img[0])) return;
-      const f = document.createElement('div'); f.className = 'frame';
-      f.style.aspectRatio = ratio(w);
-      const img = new Image(); img.className = 'base in'; img.src = thumb(w.img[0]); f.append(img);
-      peek.append(f); peek.classList.add('on'); splitOn(f, i);
+      if (!has(w.img[0])) { peek.classList.remove('on'); return; }
+      const img = new Image(); img.src = thumb(w.img[0]); img.alt = '';
+      peek.append(img); peek.classList.add('on');
+      sound.pluck(i);
     };
     b.onmouseleave = () => peek.classList.remove('on');
     li.append(b);
     list.prepend(li);
     indexLis.push(li);
   });
-  list.addEventListener('mousemove', (e) => {
-    peek.style.transform = `translate(${Math.min(e.clientX + 28, innerWidth - 280)}px, ${Math.min(e.clientY - 120, innerHeight - 340)}px)`;
-  });
+  // the preview lives outside the scrolling sheet, fixed to the window
+  const movePeek = (e) => {
+    const pw = 260, ph = peek.offsetHeight || 320;
+    const x = Math.min(e.clientX + 28, innerWidth - pw - 16);
+    const y = Math.max(16, Math.min(e.clientY - ph / 2, innerHeight - ph - 16));
+    peek.style.transform = `translate(${x}px, ${y}px)`;
+  };
+  list.addEventListener('mousemove', movePeek);
 }
 
 /* ================= detail ================= */
@@ -292,17 +334,17 @@ function open(i) {
   w.img.forEach((id, k) => {
     const s = document.createElement('div'); s.className = 'd-slide';
     if (has(id)) {
-      const img = new Image(); img.alt = k === 0 ? `${w.titolo}, ${w.autore}` : `${w.titolo}, immagine ${k + 1}`;
+      const img = new Image(); img.alt = k === 0 ? `${w.titolo}, ${w.autore}` : `${w.titolo}, image ${k + 1}`;
       img.src = thumb(id);                          // instant, then sharpen
       const hi = new Image(); hi.onload = () => (img.src = hi.src); hi.src = large(id);
       s.append(img);
     } else {
-      s.innerHTML = `<div class="frame slip"><span></span></div>`;
+      s.innerHTML = '<div class="frame slip"><span></span></div>';
       s.querySelector('span').textContent = w.titolo;
     }
     D.track.append(s);
   });
-  $('#d-num').innerHTML = `<b>${w.n}</b>`;
+  $('#d-num').textContent = w.n;
   $('#d-title').textContent = w.titolo;
   $('#d-author').textContent = w.autore;
   $('#d-meta').textContent = [w.anno, DISC[w.disciplina]].filter(Boolean).join(', ');
@@ -313,6 +355,7 @@ function open(i) {
   $('#d-prev').hidden = $('#d-next').hidden = $('#d-count').hidden = !multi;
   slide(0);
   D.el.hidden = false;
+  peek.classList.remove('on');
   $('#d-close').focus({ preventScroll: true });
   history.replaceState(null, '', `#${w.n}`);
   sound.open();
@@ -350,9 +393,3 @@ addEventListener('keydown', (e) => {
   const n = parseInt(location.hash.slice(1), 10);
   if (n) open(works.findIndex((w) => w.n === n));
 }
-
-/* ================= sound ================= */
-$('#sound').addEventListener('click', (e) => {
-  const on = sound.toggle();
-  e.currentTarget.setAttribute('aria-pressed', String(on));
-});

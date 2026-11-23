@@ -52,7 +52,18 @@ a { color: inherit; }
   outline: none;
 }
 #field.dragging { cursor: grabbing; }
+#glcanvas { position: absolute; inset: 0; display: block; }
 #world { position: absolute; inset: 0; }
+/* in WebGL mode the canvas paints the images; the DOM keeps labels, hit areas and focus */
+.gl .frame { background: transparent; box-shadow: none; }
+.gl .frame img { visibility: hidden; }
+/* labels fade out under the glass band at the window edges */
+.gl #world {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 64px, #000 calc(100% - 64px), transparent), linear-gradient(transparent, #000 64px, #000 calc(100% - 64px), transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent, #000 64px, #000 calc(100% - 64px), transparent), linear-gradient(transparent, #000 64px, #000 calc(100% - 64px), transparent);
+  mask-composite: intersect;
+}
 
 .tav {
   position: absolute; left: 0; top: 0; margin: 0;
@@ -71,10 +82,6 @@ a { color: inherit; }
   pointer-events: none; -webkit-user-drag: none;
 }
 .frame img.in { opacity: 1; }
-/* RGB split layers, created on hover */
-.frame .ch { opacity: 1; mix-blend-mode: screen; transition: none; }
-.frame.split img.base { filter: url(#ch-r); }
-.frame .slice { opacity: 1; transition: none; }
 
 /* missing image: a blank paper slip with the title, as on an unfinished panel */
 .frame.slip { background: var(--paper); color: #2a2723; display: grid; place-content: center; padding: 12%; text-align: center; }
@@ -87,8 +94,7 @@ a { color: inherit; }
   transition: color .3s;
 }
 .label b {
-  font-weight: 400; color: #23201c; background: var(--paper);
-  padding: 1px 5px 0; font-variant-numeric: lining-nums tabular-nums; font-size: 12px;
+  font-weight: 400; color: #fff; font-variant-numeric: lining-nums tabular-nums; font-size: 13px;
 }
 .label i { font-style: italic; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; opacity: 0; transform: translateX(-4px); transition: opacity .35s var(--ease), transform .35s var(--ease); }
 .tav:hover .label, .tav:focus-visible .label { color: var(--ink); }
@@ -163,9 +169,12 @@ a { color: inherit; }
   transition: opacity .2s; left: 0; top: 0;
 }
 #index-peek.on { opacity: 1; }
-#index-peek .frame { width: 100%; }
+#index-peek img { display: block; width: 100%; height: auto; max-height: 340px; object-fit: contain; box-shadow: 0 24px 60px -20px #000; }
 
-.sheet-info { display: grid; place-items: center; }
+.sheet-info { display: grid; place-items: center; cursor: zoom-out; }
+.sheet-info .info-body { cursor: auto; }
+#index { cursor: zoom-out; }
+#index .row { cursor: pointer; }
 .info-body { max-width: 34em; }
 .info-body h1 { font-weight: 400; font-style: italic; font-size: clamp(44px, 7vw, 84px); line-height: 1; margin: 0 0 .3em; letter-spacing: -.01em; }
 .info-body .lede { font-size: 24px; line-height: 1.35; color: var(--paper); }
@@ -195,7 +204,7 @@ a { color: inherit; }
 .d-close { position: absolute; top: 22px; right: 30px; color: var(--dim); font-size: 16px; }
 .d-close:hover { color: var(--ink); }
 .d-num { margin: 0 0 18px; }
-.d-num b { font-weight: 400; color: #23201c; background: var(--paper); padding: 2px 7px 1px; font-variant-numeric: lining-nums; font-size: 14px; }
+.d-num { color: #fff; font-variant-numeric: lining-nums; font-size: 15px; }
 .d-card h2 { font-weight: 400; font-style: italic; font-size: 34px; line-height: 1.1; margin: 0 0 .35em; overflow-wrap: anywhere; }
 .d-author { margin: 0; font-size: 20px; color: var(--paper); }
 .d-meta { margin: .2em 0 1.6em; color: var(--dim); font-size: 16px; }

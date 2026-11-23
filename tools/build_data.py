@@ -58,11 +58,12 @@ def tcase(s):
         low = word.lower()
         if k and low.strip('“”"(),:') in SMALL: out.append(low); continue
         # capitalise the first letter, also after a hyphen or opening quote
-        res, up = '', True
+        res, up, run = '', True, 0
         for ch in low:
             res += ch.upper() if up and ch.isalpha() else ch
-            if ch.isalpha() or ch.isdigit(): up = False
-            if ch in '-“"(/': up = True
+            if ch.isalpha() or ch.isdigit(): up = False; run += 1
+            if ch in '-“"(/': up = True; run = 0
+            if ch in "'’" and run == 1: up = True   # D'Italia, L'Architecture
         out.append(res)
     return ' '.join(out)
 
