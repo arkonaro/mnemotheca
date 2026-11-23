@@ -105,9 +105,6 @@ void main() {
     blur += scene(uv + vec2(cos(a), sin(a)) * k * 4.0 / uView).rgb;
   }
   col = mix(col, blur * 0.25, k * 0.5);
-  // the lit rim of the glass where it meets the open field
-  float rim = smoothstep(0.08, 0.0, abs(k - 0.12)) * 0.05 + k * k * 0.04;
-  col += vec3(rim);
   gl_FragColor = vec4(col, 1.0);
 }`;
 

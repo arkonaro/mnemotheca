@@ -378,15 +378,34 @@ addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') slide(D.k + 1);
   if (e.key === 'ArrowLeft') slide(D.k - 1);
 });
-{ // swipe the carousel
-  let sx = null;
+{ // swipe sideways for the next image, swipe down or tap the dark around the image to close
+  let start = null;
   const st = $('.d-stage');
-  st.addEventListener('pointerdown', (e) => (sx = e.clientX));
-  st.addEventListener('pointerup', (e) => {
-    if (sx === null) return;
-    const dx = e.clientX - sx; sx = null;
-    if (Math.abs(dx) > 40) slide(D.k + (dx < 0 ? 1 : -1));
+  const reset = () => { D.el.style.transform = ''; D.el.style.opacity = ''; D.el.classList.remove('pulling'); };
+  st.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.d-arrow')) return;
+    start = { x: e.clientX, y: e.clientY, onImg: e.target.tagName === 'IMG' || !!e.target.closest('.slip') };
   });
+  st.addEventListener('pointermove', (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (dy > 0 && dy > Math.abs(dx)) {          // the sheet follows the finger downwards
+      D.el.classList.add('pulling');
+      D.el.style.transform = `translateY(${dy * 0.8}px)`;
+      D.el.style.opacity = String(Math.max(0.3, 1 - dy / 500));
+    }
+  });
+  const end = (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y, onImg = start.onImg;
+    start = null;
+    if (dy > 90 && dy > Math.abs(dx)) { reset(); close(); return; }
+    reset();
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { slide(D.k + (dx < 0 ? 1 : -1)); return; }
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8 && !onImg) close();
+  };
+  st.addEventListener('pointerup', end);
+  st.addEventListener('pointercancel', () => { start = null; reset(); });
 }
 // deep link: mnemotheca.org/#37
 {
