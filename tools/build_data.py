@@ -71,8 +71,11 @@ for i, w in enumerate(works, 1):
     w['titolo'] = tcase(w['titolo']); w['autore'] = tcase(w['autore'])
     w['n'] = i
     raw = desc.get(w['id'], '')
-    # keep only the body: drop the 'TITLE — Author, year.' header and the hashtag line
+    # keep only the body: drop the header ('AUTHOR / TITLE / YEAR' or the older
+    # 'TITLE — Author, year.') and the hashtag line
     paras = [p.strip() for p in raw.split('\n\n') if p.strip()]
-    if paras and ' — ' in paras[0].split('\n')[0]: paras = paras[1:]
+    if paras:
+        first = paras[0].split('\n')[0]
+        if ' — ' in first or first.count(' / ') >= 2: paras = paras[1:]
     w['testo'] = '\n'.join(p for p in paras if not p.startswith('#'))
 json.dump(works, sys.stdout, ensure_ascii=False, indent=0)
