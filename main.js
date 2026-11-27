@@ -7,13 +7,16 @@ const DISC = {
 };
 const $ = (s) => document.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// static text written for search engines (tools/build_pages.py): the app replaces it
+document.getElementById('seo')?.remove();
+const HOME_TITLE = 'Mnemotheca — an atlas of beautiful things';
 
 const [works, sizes] = await Promise.all([
-  fetch('data/opere.json').then((r) => r.json()),
-  fetch('data/sizes.json').then((r) => r.json()).catch(() => ({})),
+  fetch('/data/opere.json').then((r) => r.json()),
+  fetch('/data/sizes.json').then((r) => r.json()).catch(() => ({})),
 ]);
-const thumb = (id) => `img/t/${id}.webp`;
-const large = (id) => `img/l/${id}.webp`;
+const thumb = (id) => `/img/t/${id}.webp`;
+const large = (id) => `/img/l/${id}.webp`;
 const has = (id) => id in sizes;
 const ratio = (w) => { const s = sizes[w.img[0]]; return s ? s[0] / s[1] : 0.8; };
 
@@ -293,15 +296,16 @@ $('#info').addEventListener('click', (e) => { if (!e.target.closest('.info-body'
   const list = $('#index-list');
   works.forEach((w, i) => {
     const li = document.createElement('li');
-    const b = document.createElement('button');
+    const b = document.createElement('a');
     b.className = 'row';
+    b.href = `/${w.n}/`;
     b.innerHTML = '<span class="n"></span><span class="t"></span><span class="a"></span><span class="y"></span><span class="d"></span>';
     b.querySelector('.n').textContent = w.n;
     b.querySelector('.t').textContent = w.titolo;
     b.querySelector('.a').textContent = w.autore;
     b.querySelector('.y').textContent = w.anno || '';
     b.querySelector('.d').textContent = DISC[w.disciplina] || '';
-    b.onclick = () => open(i);
+    b.onclick = (e) => { e.preventDefault(); open(i); };
     b.onmouseenter = () => {
       peek.innerHTML = '';
       if (!has(w.img[0])) { peek.classList.remove('on'); return; }
@@ -357,7 +361,8 @@ function open(i) {
   D.el.hidden = false;
   peek.classList.remove('on');
   $('#d-close').focus({ preventScroll: true });
-  history.replaceState(null, '', `#${w.n}`);
+  history.replaceState(null, '', `/${w.n}/`);
+  document.title = `${w.titolo} — ${w.autore} · Mnemotheca`;
   sound.open();
 }
 function slide(k) {
@@ -366,7 +371,7 @@ function slide(k) {
   D.track.style.transform = `translateX(${-100 * D.k}%)`;
   $('#d-count').textContent = `${D.k + 1} / ${n}`;
 }
-function close() { D.el.hidden = true; history.replaceState(null, '', location.pathname); }
+function close() { D.el.hidden = true; history.replaceState(null, '', '/'); document.title = HOME_TITLE; }
 $('#d-prev').onclick = () => slide(D.k - 1);
 $('#d-next').onclick = () => slide(D.k + 1);
 $('#d-close').onclick = close;
@@ -407,8 +412,9 @@ addEventListener('keydown', (e) => {
   st.addEventListener('pointerup', end);
   st.addEventListener('pointercancel', () => { start = null; reset(); });
 }
-// deep link: mnemotheca.org/#37
+// deep link: mnemotheca.org/37/ (and the older mnemotheca.org/#37)
 {
-  const n = parseInt(location.hash.slice(1), 10);
+  const m = location.pathname.match(/^\/(\d+)\/?$/);
+  const n = parseInt(m ? m[1] : location.hash.slice(1), 10);
   if (n) open(works.findIndex((w) => w.n === n));
 }
